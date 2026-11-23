@@ -1,0 +1,10 @@
+{
+  "port": 8791,
+  "bind": "0.0.0.0",
+  "token": "CHANGE_ME: openssl rand -hex 24",
+  "data_dir": "../data",
+  "ytdlp": "/usr/local/bin/yt-dlp",
+  "refresh_minutes": 60,
+  "download_dir": "/DATA/Media/Youtube/video",
+  "download_height": 720
+}
