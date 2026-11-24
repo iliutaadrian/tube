@@ -1,0 +1,41 @@
+# Tube on the homelab. The download folder has the same path inside the container as on the host,
+# so tube.json uses host paths.
+name: tube
+
+services:
+  tube:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    image: tube:local
+    container_name: tube
+    restart: unless-stopped
+    mem_limit: 1g
+    ports:
+      - "8791:8791"
+    volumes:
+      - ./data:/app/data
+      - ./server/tube.json:/app/server/tube.json:ro
+      - /DATA/Media/Youtube/video:/DATA/Media/Youtube/video    # "Download to Plex" lands here
+
+# Read by CasaOS for the dashboard tile. Plain docker compose ignores it.
+x-casaos:
+  architectures:
+    - amd64
+  main: tube
+  author: iliutaadrian
+  developer: iliutaadrian
+  category: Media
+  icon: https://cdn.jsdelivr.net/gh/iliutaadrian/tube@main/server/web/icon-512.png
+  thumbnail: https://cdn.jsdelivr.net/gh/iliutaadrian/tube@main/server/web/icon-512.png
+  title:
+    en_us: Tube
+  tagline:
+    en_us: YouTube without the rest of YouTube
+  description:
+    en_us: >-
+      Private YouTube front page. Subscriptions plus searches for the interests you name.
+      No Shorts, no autoplay. One button downloads a video into the Plex folder.
+  index: /
+  port_map: "8791"
+  scheme: http

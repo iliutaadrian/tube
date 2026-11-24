@@ -20,7 +20,7 @@ No Shorts, no autoplay, no infinite scroll, no YouTube home page.
 | `server/tube.py` | The server. Python standard library only. |
 | `server/web/` | The web app. Plain JS, no build step. |
 | `server/channels.seed.json` | Channels subscribed on first start. |
-| `deploy/tube.service` | systemd unit for the homelab. |
+| `docker-compose.yml`, `deploy/` | The container for the homelab. |
 | `tests/` | `python3 -m unittest discover -s tests` |
 
 ## Setup
@@ -36,8 +36,12 @@ python3 server/tube.py                           # http://localhost:8791, paste 
 ## Deploy (homelab)
 
 ```sh
-rsync -av --exclude tube.json --exclude __pycache__ server deploy homelab:/DATA/Sites/tube/
-ssh homelab 'cp /DATA/Sites/tube/deploy/tube.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now tube'
+rsync -av --exclude tube.json --exclude __pycache__ docker-compose.yml .dockerignore server deploy homelab:/DATA/Sites/tube/
+ssh homelab 'cd /DATA/Sites/tube && docker compose up -d --build'
 ```
+
+- The image carries its own `yt-dlp`, `ffmpeg` and `deno`. yt-dlp updates at start and once a day.
+- `"ytdlp": "yt-dlp"` in `tube.json` uses the copy in the image.
+- The `x-casaos` block gives the CasaOS tile its name and icon.
 
 `server/tube.json` lives only on the server. `data/state.db` (subscriptions, history) is created there and is never overwritten by a deploy.

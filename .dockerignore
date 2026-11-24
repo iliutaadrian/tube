@@ -1,0 +1,6 @@
+data
+tests
+server/tube.json
+server/tube.json.bak-*
+**/__pycache__
+.git
