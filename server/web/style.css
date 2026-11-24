@@ -98,6 +98,7 @@ h2 { font-size: 17px; margin: 0; }
 #dlError:empty { display: none; }
 #dlError { margin: -8px 0 16px; overflow-wrap: anywhere; }
 .btn.on { border-color: var(--accent); color: #ff9da0; }
+.btn.busy { cursor: default; opacity: .75; }
 .btn.danger:hover { border-color: var(--accent); color: #ff9da0; }
 
 .watch { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }

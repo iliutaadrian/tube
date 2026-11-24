@@ -11,6 +11,7 @@ No Shorts, no autoplay, no infinite scroll, no YouTube home page.
 - **Search**: your channels by title, plus a live YouTube search.
 - **Watch later, liked, history, resume**: stored in `data/state.db`.
 - **Download to Plex**: one button on any video. `yt-dlp` on the homelab saves a 720p mp4 with embedded cover into `download_dir` (the folder Pinchflat already fills), one download at a time. Remove `download_dir` from `tube.json` to switch it off.
+- **Save to device**: a second button hands the video file to the phone or laptop you are on. If the homelab does not have it yet, it fetches it first (so it lands on Plex too) and the save starts by itself.
 - Videos play through the `youtube-nocookie.com` embed.
 
 ## Layout

@@ -1,7 +1,7 @@
 // Tube service worker. Keeps the app shell available so the installed app opens instantly
 // and shows itself (not a browser error) when the server is unreachable.
 // Network first: a deploy is picked up on the next load. /api is never cached.
-const CACHE = "tube-shell-v1";
+const CACHE = "tube-shell-v4";
 const SHELL = ["/", "/style.css", "/app.js", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (e) => {
@@ -16,7 +16,7 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/")) return;
+  if (e.request.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/api/") || url.pathname.startsWith("/file/")) return;
   e.respondWith(
     fetch(e.request).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); }

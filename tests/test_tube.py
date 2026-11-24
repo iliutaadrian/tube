@@ -182,7 +182,13 @@ class TubeTest(unittest.TestCase):
             return target
         self.app.download = fake
         self.assertEqual(self.call("POST", "/api/download", body={"vid": "xxxxxxxxxxx"})[0], 404)
-        self.assertEqual(self.ok("POST", "/api/download", body={"vid": video})["status"], "queued")
+        first = self.ok("POST", "/api/download", body={"vid": video})
+        self.assertEqual((first["status"], first["ahead"]), ("queued", 0))
+        with self.app.connect() as con:  # another video already downloading: this one waits behind it
+            con.execute("INSERT INTO downloads (vid, status, queued_at) VALUES ('other000000', 'running', 1)")
+        self.assertEqual(self.ok("GET", f"/api/download/{video}")["ahead"], 1)
+        with self.app.connect() as con:
+            con.execute("DELETE FROM downloads WHERE vid = 'other000000'")
         self.ok("POST", "/api/download", body={"vid": video})
         self.assertTrue(self.app.run_next_download())
         self.assertFalse(self.app.run_next_download(), "a double push queues once")
@@ -193,6 +199,13 @@ class TubeTest(unittest.TestCase):
         self.assertEqual(self.ok("GET", f"/api/video/{video}")["download"]["status"], "done")
         self.assertEqual(self.ok("POST", "/api/download", body={"vid": video})["status"], "done")
         self.assertEqual(len(calls), 2, "a finished video is not fetched twice")
+        self.assertEqual(self.app.downloaded_file(video), os.path.realpath(target), "Save to device serves this file")
+        self.assertIsNone(self.app.downloaded_file("xxxxxxxxxxx"))
+        with self.app.connect() as con:
+            con.execute("UPDATE downloads SET path = '/etc/hosts' WHERE vid = ?", (video,))
+        self.assertIsNone(self.app.downloaded_file(video), "nothing outside the download folder")
+        with self.app.connect() as con:
+            con.execute("UPDATE downloads SET path = ? WHERE vid = ?", (target, video))
         os.remove(target)
         self.assertIsNone(self.ok("GET", f"/api/download/{video}")["status"], "deleted from Plex: offer it again")
         self.assertEqual(self.ok("POST", "/api/download", body={"vid": video})["status"], "queued")

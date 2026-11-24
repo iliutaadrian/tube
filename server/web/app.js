@@ -209,7 +209,7 @@
         <button class="btn${v.later ? " on" : ""}" data-toggle="later" aria-pressed="${!!v.later}">${v.later ? "Saved for later" : "Watch later"}</button>
         <button class="btn${v.watched ? " on" : ""}" data-toggle="watched" aria-pressed="${!!v.watched}">${v.watched ? "Watched" : "Mark watched"}</button>
         <button class="btn" data-toggle="hidden" aria-pressed="false" title="Remove from For you">Not interested</button>
-        ${data.download.enabled ? '<button class="btn" id="dl"></button>' : ""}
+        ${data.download.enabled ? '<button class="btn" id="dl"></button><a class="btn" id="save">Save to device</a>' : ""}
         <a class="btn" href="https://www.youtube.com/watch?v=${esc(vid)}" target="_blank" rel="noopener">Open on YouTube</a>
       </div><p class="error" id="dlError" role="status"></p>
       <div class="box" id="desc"><div class="label">Description</div><p class="meta">Loading…</p></div>
@@ -255,13 +255,22 @@
   }
 
   // One push sends the video to the homelab's Plex folder. The button then follows the job.
+  // "Save to device" hands that same file to this phone or laptop. If the homelab does not have it yet,
+  // the push fetches it first and the save starts by itself when it lands.
   function downloadButton(vid, first, mine) {
-    const btn = document.getElementById("dl"), note = document.getElementById("dlError");
+    const btn = document.getElementById("dl"), note = document.getElementById("dlError"), save = document.getElementById("save");
     if (!btn) return;
+    save.href = `/file/${encodeURIComponent(vid)}?token=${encodeURIComponent(token())}`;  // the file the homelab already has
+    let wanted = false, status = first.status;
     const show = (d) => {
       if (mine !== renderId) return;
       const busy = d.status === "queued" || d.status === "running";
-      btn.textContent = { queued: "Queued for Plex…", running: "Downloading to Plex…", done: "On Plex", failed: "Download failed, retry" }[d.status] || "Download to Plex";
+      status = d.status;
+      if (!busy && wanted) { wanted = false; if (d.status === "done") location.assign(save.href); }
+      save.textContent = wanted ? "Saves when it is ready…" : "Save to device";
+      save.classList.toggle("busy", wanted);
+      const waiting = d.status === "queued" && d.ahead ? `Waiting for ${d.ahead} other download${d.ahead > 1 ? "s" : ""}…` : "";
+      btn.textContent = waiting || { queued: "Queued for Plex…", running: "Downloading to Plex…", done: "On Plex", failed: "Download failed, retry" }[d.status] || "Download to Plex";
       btn.disabled = busy || d.status === "done";
       btn.classList.toggle("on", d.status === "done");
       note.textContent = d.status === "failed" ? d.error || "" : "";
@@ -270,6 +279,14 @@
     btn.addEventListener("click", () => {
       btn.disabled = true;
       api("download", { method: "POST", body: { vid } }).then(show).catch((err) => { btn.disabled = false; fail(err); });
+    });
+    save.addEventListener("click", (e) => {
+      if (status === "done") return;                 // the link itself saves the file
+      e.preventDefault();
+      if (wanted) return;
+      wanted = true;
+      if (status === "queued" || status === "running") return;   // the next poll picks it up
+      api("download", { method: "POST", body: { vid } }).then(show).catch((err) => { wanted = false; show({ status }); fail(err); });
     });
     show(first);
   }

@@ -435,7 +435,21 @@ class App:
         row = con.execute("SELECT status, error, path FROM downloads WHERE vid = ?", (vid,)).fetchone()
         if row and not (row["status"] == "done" and not os.path.exists(row["path"] or "")):
             out.update(status=row["status"], error=row["error"])  # a file deleted from Plex can be fetched again
+        if out["status"] == "queued":  # one download at a time: say how many are in front
+            out["ahead"] = con.execute(
+                "SELECT COUNT(*) FROM downloads WHERE status = 'running' OR (status = 'queued' AND queued_at < "
+                "(SELECT queued_at FROM downloads WHERE vid = ?))", (vid,)).fetchone()[0]
         return out
+
+    def downloaded_file(self, vid):
+        """Path of a finished download, for "Save to device". None unless it is a file in the download folder."""
+        if not self.download_dir or not VID_RE.fullmatch(vid or ""):
+            return None
+        with self.connect() as con:
+            row = con.execute("SELECT path FROM downloads WHERE vid = ? AND status = 'done'", (vid,)).fetchone()
+        full = os.path.realpath(row["path"]) if row and row["path"] else ""
+        inside = full.startswith(os.path.realpath(self.download_dir) + os.sep)
+        return full if inside and os.path.isfile(full) else None
 
     def queue_download(self, body):
         vid = body.get("vid")
@@ -716,10 +730,60 @@ def make_handler(app):
             self.end_headers()
             self.wfile.write(body)
 
+        def send_download(self, full):
+            """A downloaded video as an attachment, whole or the byte range asked for (a paused save resumes)."""
+            size = os.path.getsize(full)
+            start, end, status = 0, size - 1, 200
+            m = re.fullmatch(r"bytes=(\d*)-(\d*)", self.headers.get("Range") or "")
+            if m and (m.group(1) or m.group(2)):
+                if m.group(1):
+                    start = int(m.group(1))
+                    end = min(int(m.group(2)), end) if m.group(2) else end
+                else:
+                    start = max(0, size - int(m.group(2)))
+                status = 206
+            self.send_response(416 if start > end else status)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            if start > end:
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.send_header("Content-Length", "0")
+                return self.end_headers()
+            name = os.path.basename(full)
+            plain = re.sub(r'[^A-Za-z0-9 ._()-]', "_", name)
+            self.send_header("Content-Type", "video/mp4" if name.lower().endswith(".mp4") else "application/octet-stream")
+            self.send_header("Content-Disposition",
+                             f"attachment; filename=\"{plain}\"; filename*=UTF-8''{urllib.parse.quote(name)}")
+            self.send_header("Content-Length", str(end - start + 1))
+            if status == 206:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.end_headers()
+            with open(full, "rb") as f:
+                f.seek(start)
+                left = end - start + 1
+                try:
+                    while left > 0:
+                        chunk = f.read(min(262144, left))
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                        left -= len(chunk)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass  # the browser cancelled the save
+
         def dispatch(self, method):
             url = urllib.parse.urlsplit(self.path)
             if url.path == "/health":
                 return self.send(200, b'{"ok":true}', "application/json")
+            if url.path.startswith("/file/"):
+                # A plain link cannot send headers, so the token may come in the query string here.
+                token = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip() \
+                    or urllib.parse.parse_qs(url.query).get("token", [""])[0]
+                if method != "GET" or not app.authorised(token):
+                    return self.send(401, b"Token required", "text/plain")
+                full = app.downloaded_file(url.path.split("/", 2)[2])
+                return self.send_download(full) if full else self.send(404, b"Not found", "text/plain")
             if url.path.startswith("/api/"):
                 body = {}
                 length = int(self.headers.get("Content-Length") or 0)
